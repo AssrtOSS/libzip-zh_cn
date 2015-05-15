@@ -37,6 +37,8 @@
 
 #include "zipint.h"
 
+#include <iconv.h>
+
 
 zip_uint32_t
 _zip_string_crc32(const zip_string_t *s)
@@ -78,11 +80,30 @@ _zip_string_free(zip_string_t *s)
     free(s);
 }
 
+zip_uint8_t *
+_zip_gbk_to_utf8(zip_uint8_t *inStr, zip_uint32_t in, zip_uint32_t* out)
+{
+	//fprintf(stderr, "INSIDE CONVERT %d,,\n", in);
+	iconv_t conveter = iconv_open("UTF-8", "GB18030");
+	char *outStr = (zip_uint8_t*)malloc(in * 2 + 1);
+	memset(outStr, 0, in * 2 + 1);
+	size_t a = in * 2; //enough space
+	char *outPtr = outStr;
+
+	iconv(conveter, &inStr, &in, &outPtr, &a);
+	iconv_close(conveter);
+	*out = strlen(outStr);
+	//fprintf(stderr, "INSIDE CONVERT %s,,\n", outStr);
+
+	return outStr;
+}
 
 const zip_uint8_t *
 _zip_string_get(zip_string_t *string, zip_uint32_t *lenp, zip_flags_t flags, zip_error_t *error)
 {
     static const zip_uint8_t empty[1] = "";
+	char convbuf[256];
+	memset(convbuf,0,256);
 
     if (string == NULL) {
 	if (lenp)
@@ -99,12 +120,16 @@ _zip_string_get(zip_string_t *string, zip_uint32_t *lenp, zip_flags_t flags, zip
 	     && string->encoding != ZIP_ENCODING_ASCII && string->encoding != ZIP_ENCODING_UTF8_KNOWN)
 	    || (string->encoding == ZIP_ENCODING_CP437)) {
 	    if (string->converted == NULL) {
-		if ((string->converted=_zip_cp437_to_utf8(string->raw, string->length,
-							  &string->converted_length, error)) == NULL)
+		/*if ((string->converted=_zip_cp437_to_utf8(string->raw, string->length,
+							  &string->converted_length, error)) == NULL)*/
+		strcpy(convbuf,string->raw);
+		//fprintf(stderr, "INSIDE STRGET\n");
+		if ((string->converted = _zip_gbk_to_utf8(convbuf, strlen(convbuf), &string->converted_length)) == NULL)
 		    return NULL;
 	    }
 	    if (lenp)
 		*lenp = string->converted_length;
+		//fprintf(stderr, "GET %s\n", string->converted);
 	    return string->converted;
 	}
     }
